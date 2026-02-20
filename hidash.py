@@ -576,7 +576,7 @@ Sample Student Comments:
 
 Question: {prompt}
 
-Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on what students actually said. DO NOT write summary sentences or conclusions."""
+Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on what students actually said. DO NOT write summary sentences or conclusions. NO headers in your responses."""
         
         try:
             client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
