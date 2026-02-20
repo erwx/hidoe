@@ -581,7 +581,7 @@ Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on w
         try:
             client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             response = client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=300,
                 messages=[{"role": "user", "content": system_prompt}]
             )
