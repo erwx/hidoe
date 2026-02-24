@@ -22,6 +22,12 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from anthropic import Anthropic
 
+# Solarized Light theme colors
+bg_color = "#fdf6e3"
+text_color = "#657b83"
+plot_bg = "#eee8d5"
+grid_color = "#93a1a1"
+
 # Page config
 st.set_page_config(page_title="PADI Analytics", layout="wide")
 
@@ -58,7 +64,7 @@ if not st.session_state.logged_in:
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         
-        if st.button("Login", use_container_width=True):
+        if st.button("Login", width='stretch'):
             if username in USERS and USERS[username] == password:
                 st.session_state.logged_in = True
                 st.session_state.username = username
@@ -169,24 +175,6 @@ else:
                 del st.session_state[key]
             st.rerun()
     teacher_filter = None  # Teachers don't get to filter by teacher
-
-# Dark gray color scheme (no black)
-bg_color = "#2b2b2b"
-text_color = "#e0e0e0"
-plot_bg = "#3a3a3a"
-grid_color = "#555555"
-
-st.markdown(f"""
-    <style>
-    .stApp {{
-        background-color: {bg_color};
-        color: {text_color};
-    }}
-    .stMarkdown, .stText {{
-        color: {text_color};
-    }}
-    </style>
-""", unsafe_allow_html=True)
 
 # Filter data by date range
 filtered_df = student_df[
@@ -384,7 +372,7 @@ with col_main:
         )
         # Prevent clipping of markers at edges
         fig.update_traces(cliponaxis=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Bottom row - Correlations and Teacher Reflections
     b1, b2 = st.columns(2)
@@ -414,7 +402,7 @@ with col_main:
         
         if len(corr_filtered_df) > 0:
             corr_data = corr_filtered_df[["Engaged", "Choice", "Prepared", "Confused"]].copy()
-            corr_data = corr_data.replace({"Yes": 1, "No": 0})
+            corr_data = corr_data.replace({"Yes": 1, "No": 0}).infer_objects(copy=False)
             corr_data = corr_data.apply(pd.to_numeric, errors="coerce")
             corr_matrix = corr_data.corr()
             
@@ -496,34 +484,31 @@ with col_main:
 with col_chat:
     st.write("### AI Analysis")
     
-    # Fixed height scrollable container for chat
-    chat_container = st.container(height=600)
+    # FAQ buttons - 4 buttons in 2x2 grid
+    faq_col1, faq_col2 = st.columns(2)
+    
+    with faq_col1:
+        if st.button("How are my students responding overall?", width='stretch', key="faq1"):
+            st.session_state.pending_question = "How are my students responding overall?"
+            st.rerun()
+        
+        if st.button("What are the main themes in feedback?", width='stretch', key="faq2"):
+            st.session_state.pending_question = "What are the main themes in feedback?"
+            st.rerun()
+    
+    with faq_col2:
+        if st.button("Do my reflections align with student reports?", width='stretch', key="faq3"):
+            st.session_state.pending_question = "Do my reflections align with student reports?"
+            st.rerun()
+        
+        if st.button("Which tasks worked best?", width='stretch', key="faq4"):
+            st.session_state.pending_question = "Which tasks worked best?"
+            st.rerun()
+    
+    # Reduced height scrollable container for chat (450px to fit FAQ buttons)
+    chat_container = st.container(height=450)
     
     with chat_container:
-        # Show FAQ buttons if no chat history
-        if len(st.session_state.chat_history) == 0:
-            st.write("**Get started with a question:**")
-            
-            col_faq1, col_faq2 = st.columns(2)
-            
-            with col_faq1:
-                if st.button("What patterns do you see?", use_container_width=True):
-                    st.session_state.pending_question = "What patterns do you see in the data?"
-                    st.rerun()
-                
-                if st.button("How's student choice?", use_container_width=True):
-                    st.session_state.pending_question = "How are students responding to having choice?"
-                    st.rerun()
-            
-            with col_faq2:
-                if st.button("What's confusing students?", use_container_width=True):
-                    st.session_state.pending_question = "What topics or tasks are confusing students the most?"
-                    st.rerun()
-                
-                if st.button("How's engagement?", use_container_width=True):
-                    st.session_state.pending_question = "How are engagement levels looking?"
-                    st.rerun()
-        
         # Display chat history
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
@@ -565,18 +550,18 @@ with col_chat:
         
         system_prompt = f"""Analyze student exit ticket data.
 
-DATA (All Time, n={total_all}):
-- Engaged: {engaged_all:.0f}%
-- Confused: {confused_all:.0f}%  
-- Choice: {choice_all:.0f}%
-- Prepared: {prepared_all:.0f}%
+            DATA (All Time, n={total_all}):
+            - Engaged: {engaged_all:.0f}%
+            - Confused: {confused_all:.0f}%  
+            - Choice: {choice_all:.0f}%
+            - Prepared: {prepared_all:.0f}%
 
-Sample Student Comments:
-{comments}{teacher_context}
+            Sample Student Comments:
+            {comments}{teacher_context}
 
-Question: {prompt}
+            Question: {prompt}
 
-Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on what students actually said. DO NOT write summary sentences or conclusions. NO headers in your responses."""
+            Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on what students actually said. DO NOT write summary sentences or conclusions. NO criticising teachers."""
         
         try:
             client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -587,6 +572,12 @@ Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on w
             )
             
             answer = response.content[0].text
+            
+            # Strip markdown headings (# ## ###) from response
+            import re
+            answer = re.sub(r'^#+\s+.*$', '', answer, flags=re.MULTILINE)
+            answer = answer.strip()
+            
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
             
         except Exception as e:
