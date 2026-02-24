@@ -374,16 +374,16 @@ with col_main:
         fig.update_traces(cliponaxis=False)
         st.plotly_chart(fig, width='stretch')
     
-    # Bottom row - Correlations and Teacher Reflections
+    # Bottom row - Relationships/Correlations and Teacher Reflections
     b1, b2 = st.columns(2)
     
     with b1:
-        # Compact task selector using radio buttons (no full refresh)
-        corr_task_filter = st.radio(
-            "Correlations",
+        # Compact task selector using radio buttons
+        rel_task_filter = st.radio(
+            "Correlations" if st.session_state.username == "admin" else "How do responses relate?",
             ["All", "T1", "T2", "End"],
             horizontal=True,
-            key="corr_task_radio"
+            key="rel_task_radio"
         )
         
         # Map short names to full task names
@@ -393,52 +393,92 @@ with col_main:
             "T2": "Instructional Task #2",
             "End": "End-of-Unit Performance Task"
         }
-        full_task_name = task_map[corr_task_filter]
+        full_task_name = task_map[rel_task_filter]
         
-        # Filter by task type for correlations
-        corr_filtered_df = filtered_df.copy()
+        # Filter by task type
+        rel_filtered_df = filtered_df.copy()
         if full_task_name != "All Tasks":
-            corr_filtered_df = corr_filtered_df[corr_filtered_df["Task"] == full_task_name]
+            rel_filtered_df = rel_filtered_df[rel_filtered_df["Task"] == full_task_name]
         
-        if len(corr_filtered_df) > 0:
-            corr_data = corr_filtered_df[["Engaged", "Choice", "Prepared", "Confused"]].copy()
-            corr_data = corr_data.replace({"Yes": 1, "No": 0}).infer_objects(copy=False)
-            corr_data = corr_data.apply(pd.to_numeric, errors="coerce")
-            corr_matrix = corr_data.corr()
-            
-            # Display as styled HTML table - 200px to align with reflections bottom
-            html = f"""
-            <div style="background-color: {plot_bg}; padding: 10px; border-radius: 5px; height: 200px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse; color: {text_color};">
-                <thead>
-                    <tr style="border-bottom: 1px solid {grid_color};">
-                        <th style="padding: 4px; text-align: left; font-size: 0.85em;"></th>
-                        <th style="padding: 4px; text-align: center; font-size: 0.85em;">Engaged</th>
-                        <th style="padding: 4px; text-align: center; font-size: 0.85em;">Choice</th>
-                        <th style="padding: 4px; text-align: center; font-size: 0.85em;">Prepared</th>
-                        <th style="padding: 4px; text-align: center; font-size: 0.85em;">Confused</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-            
-            for idx in corr_matrix.index:
-                html += f'<tr style="border-bottom: 1px solid {grid_color};">'
-                html += f'<td style="padding: 4px; font-weight: bold; font-size: 0.85em;">{idx}</td>'
-                for col in corr_matrix.columns:
-                    val = corr_matrix.loc[idx, col]
-                    html += f'<td style="padding: 4px; text-align: center; font-size: 0.85em;">{val:.2f}</td>'
-                html += '</tr>'
-            
-            html += """
-                </tbody>
-            </table>
-            </div>
-            """
-            
-            st.markdown(html, unsafe_allow_html=True)
+        if st.session_state.username == "admin":
+            # Admin view: Show correlation table
+            if len(rel_filtered_df) > 0:
+                corr_data = rel_filtered_df[["Engaged", "Choice", "Prepared", "Confused"]].copy()
+                corr_data = corr_data.replace({"Yes": 1, "No": 0}).infer_objects(copy=False)
+                corr_data = corr_data.apply(pd.to_numeric, errors="coerce")
+                corr_matrix = corr_data.corr()
+                
+                # Display as styled HTML table - 240px to match reflections
+                html = f"""
+                <div style="background-color: {plot_bg}; padding: 10px; border-radius: 5px; height: 240px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; color: {text_color};">
+                    <thead>
+                        <tr style="border-bottom: 1px solid {grid_color};">
+                            <th style="padding: 10px; text-align: left; font-size: 0.95em;"></th>
+                            <th style="padding: 10px; text-align: center; font-size: 0.95em;">Engaged</th>
+                            <th style="padding: 10px; text-align: center; font-size: 0.95em;">Choice</th>
+                            <th style="padding: 10px; text-align: center; font-size: 0.95em;">Prepared</th>
+                            <th style="padding: 10px; text-align: center; font-size: 0.95em;">Confused</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
+                
+                for idx in corr_matrix.index:
+                    html += f'<tr style="border-bottom: 1px solid {grid_color};">'
+                    html += f'<td style="padding: 10px; font-weight: bold; font-size: 0.95em;">{idx}</td>'
+                    for col in corr_matrix.columns:
+                        val = corr_matrix.loc[idx, col]
+                        html += f'<td style="padding: 10px; text-align: center; font-size: 0.95em;">{val:.2f}</td>'
+                    html += '</tr>'
+                
+                html += """
+                    </tbody>
+                </table>
+                </div>
+                """
+                
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.write("No data")
         else:
-            st.write("No data")
+            # Teacher view: Show relationship percentages with icons
+            rel_container = st.container(height=240)
+            
+            with rel_container:
+                if len(rel_filtered_df) > 0:
+                    metrics = ["Engaged", "Choice", "Prepared", "Confused"]
+                    
+                    for metric in metrics:
+                        # Get students who responded Yes to this metric
+                        metric_yes = rel_filtered_df[rel_filtered_df[metric] == "Yes"]
+                        
+                        if len(metric_yes) > 0:
+                            st.write(f"**{metric} ({len(metric_yes)} students):**")
+                            
+                            # Calculate co-occurrence with other metrics
+                            for other in metrics:
+                                if other != metric:
+                                    also_yes = (metric_yes[other] == "Yes").sum()
+                                    pct = also_yes / len(metric_yes) * 100
+                                    
+                                    # Use icons for clarity
+                                    if metric == "Confused":
+                                        # Special icons when showing Confused relationships
+                                        if other in ["Engaged", "Choice"]:
+                                            icon = "❔"  # Question mark for unclear relationships
+                                        else:  # Prepared
+                                            icon = "⚠"   # Caution symbol
+                                    elif other == "Confused":
+                                        icon = "⚠"
+                                    else:
+                                        icon = "✓"
+                                    
+                                    st.write(f"  {icon} {pct:.0f}% {other.lower()}")
+                            
+                            st.write("")  # Spacing
+                else:
+                    st.write("No data")
     
     with b2:
         st.write("**Teacher Reflections**")
@@ -525,15 +565,23 @@ with col_chat:
     if prompt:
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         
-        # Calculate stats from FULL dataset
-        total_all = len(student_df)
-        engaged_all = (student_df["Engaged"] == "Yes").sum() / total_all * 100
-        confused_all = (student_df["Confused"] == "Yes").sum() / total_all * 100
-        choice_all = (student_df["Choice"] == "Yes").sum() / total_all * 100
-        prepared_all = (student_df["Prepared"] == "Yes").sum() / total_all * 100
+        # Use filtered_df (teacher's own data) instead of full student_df
+        total_all = len(filtered_df)
+        engaged_all = (filtered_df["Engaged"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
+        confused_all = (filtered_df["Confused"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
+        choice_all = (filtered_df["Choice"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
+        prepared_all = (filtered_df["Prepared"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
+        
+        # Get individual student responses (last 50)
+        individual_responses = []
+        for _, row in filtered_df.nlargest(50, "Timestamp").iterrows():
+            individual_responses.append(
+                f"Student: Engaged={row['Engaged']}, Confused={row['Confused']}, Choice={row['Choice']}, Prepared={row['Prepared']}, LikedPartner={row['LikedPartner']}"
+            )
+        individual_data = "\n".join(individual_responses)
         
         # Get recent comments
-        recent = student_df.nlargest(15, "Timestamp")
+        recent = filtered_df.nlargest(15, "Timestamp")
         comments = "\n".join([
             f"• Liked: \"{row['LikedText']}\" | Disliked: \"{row['DislikedText']}\""
             for _, row in recent.iterrows()
@@ -550,37 +598,52 @@ with col_chat:
         
         system_prompt = f"""Analyze student exit ticket data.
 
-            DATA (All Time, n={total_all}):
-            - Engaged: {engaged_all:.0f}%
-            - Confused: {confused_all:.0f}%  
-            - Choice: {choice_all:.0f}%
-            - Prepared: {prepared_all:.0f}%
+        AGGREGATE DATA (n={total_all}):
+        - Engaged: {engaged_all:.0f}%
+        - Confused: {confused_all:.0f}%  
+        - Choice: {choice_all:.0f}%
+        - Prepared: {prepared_all:.0f}%
 
-            Sample Student Comments:
-            {comments}{teacher_context}
+        INDIVIDUAL STUDENT RESPONSES (most recent 50):
+        {individual_data}
 
-            Question: {prompt}
+        Sample Student Comments:
+        {comments}{teacher_context}
 
-            Write 2-3 short paragraphs. Just dive in - NO introductory sentences. Focus on what students actually said. DO NOT write summary sentences or conclusions. NO criticising teachers."""
+        Question: {prompt}
+
+        Instructions:
+        - You are a helpful teacher's assistant analyzing exit ticket data
+        - Write 1-2 short paragraphs (3-5 sentences each)
+        - Start directly with your analysis - no preamble
+        - Ground your response in the data: cite specific numbers and patterns
+        - When students mention specific issues, quote them briefly
+        - End with 2-3 specific follow-up questions you can answer from this data
+        - Be constructive and supportive - focus on insights, not critique
+        - Do not rate or judge lessons, tasks, or teachers' decisions
+        - Use plain language - avoid jargon and academic terminology"""
         
         try:
-            client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=300,
-                messages=[{"role": "user", "content": system_prompt}]
-            )
-            
-            answer = response.content[0].text
-            
-            # Strip markdown headings (# ## ###) from response
-            import re
-            answer = re.sub(r'^#+\s+.*$', '', answer, flags=re.MULTILINE)
-            answer = answer.strip()
-            
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            # Show a spinner while waiting for response
+            with st.spinner("Thinking..."):
+                client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+                response = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=400,
+                    messages=[{"role": "user", "content": system_prompt}]
+                )
+                
+                answer = response.content[0].text
+                
+                # Strip markdown headings (# ## ###) from response
+                import re
+                answer = re.sub(r'^#+\s+.*$', '', answer, flags=re.MULTILINE)
+                answer = answer.strip()
+                
+                st.session_state.chat_history.append({"role": "assistant", "content": answer})
             
         except Exception as e:
             st.error(f"Error: {str(e)}")
         
+        st.rerun()
         st.rerun()
