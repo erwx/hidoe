@@ -378,30 +378,29 @@ with col_main:
     b1, b2 = st.columns(2)
     
     with b1:
-        # Compact task selector using radio buttons
-        rel_task_filter = st.radio(
-            "Correlations" if st.session_state.username == "admin" else "How do responses relate?",
-            ["All", "T1", "T2", "End"],
-            horizontal=True,
-            key="rel_task_radio"
-        )
-        
-        # Map short names to full task names
-        task_map = {
-            "All": "All Tasks",
-            "T1": "Instructional Task #1",
-            "T2": "Instructional Task #2",
-            "End": "End-of-Unit Performance Task"
-        }
-        full_task_name = task_map[rel_task_filter]
-        
-        # Filter by task type
-        rel_filtered_df = filtered_df.copy()
-        if full_task_name != "All Tasks":
-            rel_filtered_df = rel_filtered_df[rel_filtered_df["Task"] == full_task_name]
-        
         if st.session_state.username == "admin":
-            # Admin view: Show correlation table
+            # Admin view: Show correlation table with task filter
+            rel_task_filter = st.radio(
+                "Correlations",
+                ["All", "T1", "T2", "End"],
+                horizontal=True,
+                key="rel_task_radio"
+            )
+            
+            # Map short names to full task names
+            task_map = {
+                "All": "All Tasks",
+                "T1": "Instructional Task #1",
+                "T2": "Instructional Task #2",
+                "End": "End-of-Unit Performance Task"
+            }
+            full_task_name = task_map[rel_task_filter]
+            
+            # Filter by task type
+            rel_filtered_df = filtered_df.copy()
+            if full_task_name != "All Tasks":
+                rel_filtered_df = rel_filtered_df[rel_filtered_df["Task"] == full_task_name]
+            
             if len(rel_filtered_df) > 0:
                 corr_data = rel_filtered_df[["Engaged", "Choice", "Prepared", "Confused"]].copy()
                 corr_data = corr_data.replace({"Yes": 1, "No": 0}).infer_objects(copy=False)
@@ -442,43 +441,127 @@ with col_main:
             else:
                 st.write("No data")
         else:
-            # Teacher view: Show relationship percentages with icons
-            rel_container = st.container(height=240)
+            # Teacher view: No radio buttons, just tabs with visualizations
+            rel_filtered_df = filtered_df.copy()
             
-            with rel_container:
-                if len(rel_filtered_df) > 0:
-                    metrics = ["Engaged", "Choice", "Prepared", "Confused"]
+            if len(rel_filtered_df) > 0:
+                
+                tab1, tab2 = st.tabs(["Quadrant", "Scatter Plot"])
+                
+                with tab1:
+                    # Single quadrant with all tasks - Prepared vs Confused
+                    import plotly.graph_objects as go
                     
-                    for metric in metrics:
-                        # Get students who responded Yes to this metric
-                        metric_yes = rel_filtered_df[rel_filtered_df[metric] == "Yes"]
+                    fig = go.Figure()
+                    
+                    task_configs = [
+                        ("Instructional Task #1", "T1", "circle", "#268bd2"),
+                        ("Instructional Task #2", "T2", "square", "#cb4b16"),
+                        ("End-of-Unit Performance Task", "End", "diamond", "#859900")
+                    ]
+                    
+                    for full_task, label, symbol, color in task_configs:
+                        task_df = rel_filtered_df[rel_filtered_df["Task"] == full_task]
                         
-                        if len(metric_yes) > 0:
-                            st.write(f"**{metric} ({len(metric_yes)} students):**")
+                        if len(task_df) > 0:
+                            total = len(task_df)
+                            confused_count = (task_df["Confused"] == "Yes").sum()
+                            prepared_count = (task_df["Prepared"] == "Yes").sum()
                             
-                            # Calculate co-occurrence with other metrics
-                            for other in metrics:
-                                if other != metric:
-                                    also_yes = (metric_yes[other] == "Yes").sum()
-                                    pct = also_yes / len(metric_yes) * 100
-                                    
-                                    # Use icons for clarity
-                                    if metric == "Confused":
-                                        # Special icons when showing Confused relationships
-                                        if other in ["Engaged", "Choice"]:
-                                            icon = "❔"  # Question mark for unclear relationships
-                                        else:  # Prepared
-                                            icon = "⚠"   # Caution symbol
-                                    elif other == "Confused":
-                                        icon = "⚠"
-                                    else:
-                                        icon = "✓"
-                                    
-                                    st.write(f"  {icon} {pct:.0f}% {other.lower()}")
+                            confused_pct = (confused_count / total * 100) if total > 0 else 0
+                            prepared_pct = (prepared_count / total * 100) if total > 0 else 0
                             
-                            st.write("")  # Spacing
-                else:
-                    st.write("No data")
+                            fig.add_trace(go.Scatter(
+                                x=[confused_pct],
+                                y=[prepared_pct],
+                                mode='markers+text',
+                                marker=dict(size=15, color=color, symbol=symbol, opacity=0.7),
+                                text=[label],
+                                textposition="top center",
+                                textfont=dict(size=12, color=text_color),
+                                showlegend=False,
+                                hovertemplate=f"<b>{label}</b><br>Prepared: {prepared_pct:.1f}%<br>Confused: {confused_pct:.1f}%<extra></extra>"
+                            ))
+                    
+                    fig.add_hline(y=50, line_color=grid_color, line_width=1)
+                    fig.add_vline(x=50, line_color=grid_color, line_width=1)
+                    
+                    fig.add_annotation(x=25, y=75, text="More Prepared<br>Less Confused",
+                                      showarrow=False, font=dict(size=14, color=text_color), opacity=0.7)
+                    fig.add_annotation(x=75, y=75, text="More Prepared<br>More Confused",
+                                      showarrow=False, font=dict(size=14, color=text_color), opacity=0.7)
+                    fig.add_annotation(x=25, y=25, text="Less Prepared<br>Less Confused",
+                                      showarrow=False, font=dict(size=14, color=text_color), opacity=0.7)
+                    fig.add_annotation(x=75, y=25, text="Less Prepared<br>More Confused",
+                                      showarrow=False, font=dict(size=14, color=text_color), opacity=0.7)
+                    
+                    fig.update_layout(
+                        xaxis=dict(range=[0, 100], showgrid=False, showticklabels=False, zeroline=False),
+                        yaxis=dict(range=[0, 100], showgrid=False, showticklabels=False, zeroline=False),
+                        height=450,
+                        margin=dict(l=20, r=20, t=20, b=20),
+                        paper_bgcolor=plot_bg,
+                        plot_bgcolor=plot_bg,
+                        font=dict(color=text_color, size=10)
+                    )
+                    
+                    st.plotly_chart(fig, width='stretch')
+                
+                with tab2:
+                    # Scatter plot with axes and labels
+                    import plotly.graph_objects as go
+                    
+                    fig_scatter = go.Figure()
+                    
+                    task_configs = [
+                        ("Instructional Task #1", "T1", "circle", "#268bd2"),
+                        ("Instructional Task #2", "T2", "square", "#cb4b16"),
+                        ("End-of-Unit Performance Task", "End", "diamond", "#859900")
+                    ]
+                    
+                    for full_task, label, symbol, color in task_configs:
+                        task_df = rel_filtered_df[rel_filtered_df["Task"] == full_task]
+                        
+                        if len(task_df) > 0:
+                            total = len(task_df)
+                            confused_count = (task_df["Confused"] == "Yes").sum()
+                            prepared_count = (task_df["Prepared"] == "Yes").sum()
+                            
+                            confused_pct = (confused_count / total * 100) if total > 0 else 0
+                            prepared_pct = (prepared_count / total * 100) if total > 0 else 0
+                            
+                            fig_scatter.add_trace(go.Scatter(
+                                x=[confused_pct],
+                                y=[prepared_pct],
+                                mode='markers+text',
+                                marker=dict(size=15, color=color, symbol=symbol, opacity=0.7),
+                                text=[label],
+                                textposition="top center",
+                                textfont=dict(size=12, color=text_color),
+                                showlegend=False,
+                                hovertemplate=f"<b>{label}</b><br>Prepared: {prepared_pct:.1f}%<br>Confused: {confused_pct:.1f}%<extra></extra>"
+                            ))
+                    
+                    # Add quadrant reference lines
+                    fig_scatter.add_hline(y=50, line_dash="dot", line_color=grid_color, opacity=0.5)
+                    fig_scatter.add_vline(x=50, line_dash="dot", line_color=grid_color, opacity=0.5)
+                    
+                    fig_scatter.update_layout(
+                        xaxis_title="% Confused",
+                        yaxis_title="% Prepared",
+                        xaxis=dict(range=[0, 100], showgrid=False),
+                        yaxis=dict(range=[0, 100], showgrid=False),
+                        height=450,
+                        margin=dict(l=40, r=20, t=30, b=40),
+                        paper_bgcolor=plot_bg,
+                        plot_bgcolor=plot_bg,
+                        font=dict(color=text_color, size=10)
+                    )
+                    
+                    st.plotly_chart(fig_scatter, width='stretch')
+                    
+            else:
+                st.write("No data")
     
     with b2:
         st.write("**Teacher Reflections**")
@@ -507,7 +590,7 @@ with col_main:
             ]
         
         # Scrollable container - 240px height
-        reflections_container = st.container(height=240)
+        reflections_container = st.container(height=475)
         
         with reflections_container:
             if st.session_state.username == "admin" and teacher_filter == "Select a teacher...":
@@ -532,21 +615,21 @@ with col_chat:
             st.session_state.pending_question = "How are my students responding overall?"
             st.rerun()
         
-        if st.button("What are the main themes in feedback?", width='stretch', key="faq2"):
-            st.session_state.pending_question = "What are the main themes in feedback?"
+        if st.button("Do my reflections align with student reports?", width='stretch', key="faq2"):
+            st.session_state.pending_question = "Do my reflections align with student reports?"
             st.rerun()
     
     with faq_col2:
-        if st.button("Do my reflections align with student reports?", width='stretch', key="faq3"):
-            st.session_state.pending_question = "Do my reflections align with student reports?"
+        if st.button("Are engaged students also feeling prepared?", width='stretch', key="faq3"):
+            st.session_state.pending_question = "Are engaged students also feeling prepared?"
             st.rerun()
         
-        if st.button("Which tasks worked best?", width='stretch', key="faq4"):
-            st.session_state.pending_question = "Which tasks worked best?"
+        if st.button("What patterns are present among confused students?", width='stretch', key="faq4"):
+            st.session_state.pending_question = "What patterns are present among confused students?"
             st.rerun()
     
-    # Reduced height scrollable container for chat (450px to fit FAQ buttons)
-    chat_container = st.container(height=450)
+    # Chat container with increased height
+    chat_container = st.container(height=675)
     
     with chat_container:
         # Display chat history
@@ -572,9 +655,9 @@ with col_chat:
         choice_all = (filtered_df["Choice"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
         prepared_all = (filtered_df["Prepared"] == "Yes").sum() / total_all * 100 if total_all > 0 else 0
         
-        # Get individual student responses (last 50)
+        # Get individual student responses (all filtered data)
         individual_responses = []
-        for _, row in filtered_df.nlargest(50, "Timestamp").iterrows():
+        for _, row in filtered_df.iterrows():
             individual_responses.append(
                 f"Student: Engaged={row['Engaged']}, Confused={row['Confused']}, Choice={row['Choice']}, Prepared={row['Prepared']}, LikedPartner={row['LikedPartner']}"
             )
@@ -604,7 +687,7 @@ with col_chat:
         - Choice: {choice_all:.0f}%
         - Prepared: {prepared_all:.0f}%
 
-        INDIVIDUAL STUDENT RESPONSES (most recent 50):
+        INDIVIDUAL STUDENT RESPONSES:
         {individual_data}
 
         Sample Student Comments:
@@ -618,7 +701,6 @@ with col_chat:
         - Start directly with your analysis - no preamble
         - Ground your response in the data: cite specific numbers and patterns
         - When students mention specific issues, quote them briefly
-        - End with 2-3 specific follow-up questions you can answer from this data
         - Be constructive and supportive - focus on insights, not critique
         - Do not rate or judge lessons, tasks, or teachers' decisions
         - Use plain language - avoid jargon and academic terminology"""
