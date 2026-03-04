@@ -46,6 +46,11 @@ USERS = {
     "hashimoto": os.getenv("PASSWORD_HASHIMOTO", "teacher123"),
     "jerome": os.getenv("PASSWORD_JEROME", "teacher123"),
     "ramos": os.getenv("PASSWORD_RAMOS", "teacher123"),
+    "azeez": os.getenv("PASSWORD_AZEEZ", "teacher123"),
+    "wibberley": os.getenv("PASSWORD_WIBBERLEY", "teacher123"),
+    "ebato": os.getenv("PASSWORD_EBATO", "teacher123"),
+    "yagi": os.getenv("PASSWORD_YAGI", "teacher123"),
+    "kaanaana": os.getenv("PASSWORD_KAANAANA", "teacher123"),
 }
 
 # Initialize session state
